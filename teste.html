@@ -1,0 +1,16 @@
+<script>
+var anoDeCopa = Number(prompt("Informe o ano inicial:"));
+var anoLimite = Number(prompt("Qual é o ano limite?"));
+console.log(anoDeCopa)
+console.log(anoLimite)
+
+var mostra = function(frase) {
+    document.write(frase + "<br>");
+    }
+
+while(anoDeCopa <= anoLimite) {
+    mostra(anoDeCopa + "tem copa!");
+    anoDeCopa = anoDeCopa + 4;
+    }
+mostra("Ufa! Esses foram os anos de copa até " + anoLimite);
+</script>
