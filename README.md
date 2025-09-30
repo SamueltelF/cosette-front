@@ -10,9 +10,6 @@
 
 Site oficial do **DESTINY**, um bot de WhatsApp completo com funcionalidades de entretenimento, moderação e downloads. O site oferece informações sobre o bot, sistema de login, gerenciamento de consumo e compra de créditos.
 
-## 🌐 Demonstração
-
-Acesse o site: [destiny-bot.com](https://destiny-bot.com)
 
 ## ✨ Funcionalidades do Site
 
