@@ -1,5 +1,5 @@
 
-var apiBack = 'https://cosette.uno/bot' // api do bank normal
+var apiBack = 'https://cosette.uno/api/bot' // api do bank normal
 
 export const pesquisarNumero = async (numero) => {
     try {
