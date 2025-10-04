@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-const API_BASE_URL = 'https://cosette.uno'; // Ajuste conforme necessário
+const API_BASE_URL = 'https://cosette.uno/bot'; // Ajuste conforme necessário
 
 export const useApi = () => {
     const [isLoading, setIsLoading] = useState(false)
