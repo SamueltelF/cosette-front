@@ -1,5 +1,5 @@
 
-var apiBack = 'http://br3.bronxyshost.com:4032' // api do bank normal
+var apiBack = 'https://cosette.uno' // api do bank normal
 
 export const pesquisarNumero = async (numero) => {
     try {
