@@ -1,10 +1,11 @@
-import { MessageCircle, Phone, RefreshCw, Shield, Smartphone, User, Zap, Globe } from "lucide-react";
+import { MessageCircle, Phone, RefreshCw, Shield, Smartphone, User, Zap, Globe, AlertCircle, CheckCircle } from "lucide-react";
 import { useEffect, useState } from "react"; 
-import { useApi } from "../Js/userApi"
 
 const WhatsAppBotLogin = () => {
     const [activeTab, setActiveTab] = useState('login')
     const [particula, setParticula] = useState([])
+    const [errors, setErrors] = useState({})
+    const [isLoading, setIsLoading] = useState(false)
 
     const [loginData, setLoginData] = useState({
         name: '',
@@ -32,42 +33,234 @@ const WhatsAppBotLogin = () => {
         setParticula(newParticulas)
     }, [])
 
-  const { isLoading, error, addUser, updateUser, clearError } = useApi();
+    // ========== VALIDAÇÕES ==========
+    
+    // Valida se é um nome real (não email)
+    const validateName = (name) => {
+        const trimmedName = name.trim()
+        
+        if (!trimmedName) {
+            return { valid: false, message: 'Nome é obrigatório' }
+        }
+        
+        if (trimmedName.length < 3) {
+            return { valid: false, message: 'Nome deve ter pelo menos 3 caracteres' }
+        }
+        
+        // Verifica se contém @ (email)
+        if (trimmedName.includes('@')) {
+            return { valid: false, message: 'Por favor, digite seu NOME, não email' }
+        }
+        
+        // Verifica se tem formato de email mesmo sem @
+        if (/^\S+@?\S+\.\S+$/.test(trimmedName)) {
+            return { valid: false, message: 'Digite apenas seu nome ou apelido' }
+        }
+        
+        // Verifica se tem números demais (provavelmente telefone)
+        const numberCount = (trimmedName.match(/\d/g) || []).length
+        if (numberCount > 3) {
+            return { valid: false, message: 'Nome não pode conter muitos números' }
+        }
+        
+        return { valid: true }
+    }
+
+    // Normaliza número do WhatsApp (adiciona 9 se necessário)
+    const normalizeWhatsAppNumber = (phone) => {
+        // Remove tudo exceto números
+        let numbers = phone.replace(/\D/g, '')
+        
+        // Remove 55 se já existe
+        if (numbers.startsWith('55')) {
+            numbers = numbers.slice(2)
+        }
+        
+        // Deve ter DDD (2 dígitos) + número (8 ou 9 dígitos)
+        if (numbers.length < 10) {
+            return { valid: false, message: 'Número incompleto' }
+        }
+        
+        // Extrai DDD e número
+        const ddd = numbers.slice(0, 2)
+        let numero = numbers.slice(2)
+        
+        // Se o número tem 8 dígitos, adiciona 9 na frente
+        if (numero.length === 8) {
+            numero = '9' + numero
+        }
+        
+        // Verifica se ficou com 9 dígitos
+        if (numero.length !== 9) {
+            return { valid: false, message: 'Número deve ter 9 dígitos (com o 9 da operadora)' }
+        }
+        
+        // Verifica se começa com 9
+        if (!numero.startsWith('9')) {
+            return { valid: false, message: 'Número deve começar com 9 (celular)' }
+        }
+        
+        // Monta número completo: 55 + DDD + número (9 dígitos)
+        const fullNumber = '55' + ddd + numero
+        
+        return { 
+            valid: true, 
+            normalized: fullNumber,
+            formatted: `+55 (${ddd}) ${numero.slice(0, 5)}-${numero.slice(5)}`
+        }
+    }
+
+    // Valida número do WhatsApp
+    const validatePhone = (phone) => {
+        const trimmedPhone = phone.trim()
+        
+        if (!trimmedPhone) {
+            return { valid: false, message: 'Número do WhatsApp é obrigatório' }
+        }
+        
+        return normalizeWhatsAppNumber(trimmedPhone)
+    }
+
+    // ========== FORMATAÇÃO ==========
+    
+    const formatPhoneInput = (value) => {
+        let numbers = value.replace(/\D/g, '')
+        
+        // Remove 55 inicial para formatação
+        if (numbers.startsWith('55') && numbers.length > 2) {
+            numbers = numbers.slice(2)
+        }
+        
+        // Limita a 11 dígitos (DDD + 9 dígitos)
+        numbers = numbers.slice(0, 11)
+        
+        if (numbers.length === 0) return ''
+        if (numbers.length <= 2) return `+55 (${numbers}`
+        if (numbers.length <= 7) return `+55 (${numbers.slice(0, 2)}) ${numbers.slice(2)}`
+        return `+55 (${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7)}`
+    }
+
+    // ========== HANDLERS ==========
+    
+    const handleNameChange = (e) => {
+        const value = e.target.value
+        setLoginData({...loginData, name: value})
+        
+        // Remove erro ao começar a digitar
+        if (errors.name) {
+            setErrors({...errors, name: ''})
+        }
+    }
+
+    const handlePhoneChange = (e, isUpdate = false) => {
+        const formatted = formatPhoneInput(e.target.value)
+        
+        if (isUpdate) {
+            setUpdate({...update, phone: formatted})
+            if (errors.updatePhone) {
+                setErrors({...errors, updatePhone: ''})
+            }
+        } else {
+            setLoginData({...loginData, phone: formatted})
+            if (errors.phone) {
+                setErrors({...errors, phone: ''})
+            }
+        }
+    }
 
     const handleLogin = async () => {
-        // Validação dos campos
-        if (!loginData.name.trim()) {
-            alert('Por favor, preencha o nome');
-            return;
-        }
-        if (!loginData.phone.trim()) {
-            alert('Por favor, preencha o telefone');
-            return;
+        const newErrors = {}
+        
+        // Valida nome
+        const nameValidation = validateName(loginData.name)
+        if (!nameValidation.valid) {
+            newErrors.name = nameValidation.message
         }
         
-        try {
-            const data = await addUser(loginData);
-            alert(data.mensagem || 'Operação realizada com sucesso');
-        } catch (error) {
-            alert('Erro inesperado: ' + error.message);
+        // Valida e normaliza telefone
+        const phoneValidation = validatePhone(loginData.phone)
+        if (!phoneValidation.valid) {
+            newErrors.phone = phoneValidation.message
         }
-    };
+        
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors)
+            return
+        }
+        
+        setIsLoading(true)
+        
+        try {
+            // Dados para enviar à API
+            const dataToSend = {
+                name: loginData.name.trim(),
+                phone: phoneValidation.normalized, // Número normalizado: 5585999999999
+                devices: loginData.devices
+            }
+            
+            //console.log('Dados enviados para API:', dataToSend)
+            
+            // Simula chamada API (substitua pela sua função real)
+            // const response = await addUser(dataToSend)
+            
+            // Simulação
+            await new Promise(resolve => setTimeout(resolve, 2000))
+            
+            alert(`Login realizado com sucesso!\n\nNome: ${dataToSend.name}\nWhatsApp: ${phoneValidation.formatted}\nDispositivo: ${dataToSend.devices}`)
+            
+            // Limpa formulário
+            setLoginData({ name: '', phone: '', devices: 'Android' })
+            setErrors({})
+            
+        } catch (error) {
+            alert('Erro ao fazer login: ' + error.message)
+        } finally {
+            setIsLoading(false)
+        }
+    }
 
     const handleUpdate = async () => {
-        // Validação dos campos
-        if (!update.phone.trim()) {
-            alert('Por favor, preencha o telefone para validação');
-            return;
+        const newErrors = {}
+        
+        // Valida e normaliza telefone
+        const phoneValidation = validatePhone(update.phone)
+        if (!phoneValidation.valid) {
+            newErrors.updatePhone = phoneValidation.message
         }
         
-        try {
-            const data = await updateUser(update);
-            alert(data.mensagem || 'Atualização realizada com sucesso');
-        } catch (error) {
-            alert('Erro inesperado: ' + error.message);
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors)
+            return
         }
-    };
-    
+        
+        setIsLoading(true)
+        
+        try {
+            // Dados para enviar à API
+            const dataToSend = {
+                phone: phoneValidation.normalized, // Número normalizado
+                newDevices: update.newDevices
+            }
+            
+            //console.log('📤 Dados enviados para API:', dataToSend)
+            
+            // Simula chamada API
+            // const response = await updateUser(dataToSend)
+            
+            await new Promise(resolve => setTimeout(resolve, 2000))
+            
+            alert(`Dispositivo atualizado com sucesso!\n\nWhatsApp: ${phoneValidation.formatted}\nNovo Dispositivo: ${dataToSend.newDevices}`)
+            
+            setUpdate({ phone: '', newDevices: 'Android' })
+            setErrors({})
+            
+        } catch (error) {
+            alert('Erro ao atualizar: ' + error.message)
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
     return ( 
         <>
             <style>
@@ -177,14 +370,20 @@ const WhatsAppBotLogin = () => {
                     <div className="w-full max-w-lg">
                         <div className="relative mb-8">
                             <div className="flex bg-white bg-opacity-20 backdrop-blur-sm rounded-2xl p-2 shadow-2xl border border-white border-opacity-30"> 
-                                <button onClick={() => setActiveTab('login')} className={`relative flex-1 py-4 px-6 rounded-xl font-bold text-sm transition-all duration-300 ${activeTab === 'login' ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-xl transform scale-105' : 'text-orange-800 hover:bg-white hover:bg-opacity-20'}`}> 
+                                <button onClick={() => {
+                                    setActiveTab('login')
+                                    setErrors({})
+                                }} className={`relative flex-1 py-4 px-6 rounded-xl font-bold text-sm transition-all duration-300 ${activeTab === 'login' ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-xl transform scale-105' : 'text-orange-800 hover:bg-white hover:bg-opacity-20'}`}> 
                                     <User className="w-5 h-5 inline mr-2" /> 
                                     ENTRAR
                                     {activeTab === 'login' && (
                                         <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-white rounded-full animate-bounce"></div> 
                                     )}
                                 </button>
-                                <button onClick={() => setActiveTab('update')} className={`relative flex-1 py-4 px-6 rounded-xl font-bold text-sm transition-all duration-300 ${activeTab === 'update' ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-xl transform scale-105' : 'text-orange-800 hover:bg-white hover:bg-opacity-20'}`}>
+                                <button onClick={() => {
+                                    setActiveTab('update')
+                                    setErrors({})
+                                }} className={`relative flex-1 py-4 px-6 rounded-xl font-bold text-sm transition-all duration-300 ${activeTab === 'update' ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-xl transform scale-105' : 'text-orange-800 hover:bg-white hover:bg-opacity-20'}`}>
                                     <RefreshCw className="w-5 h-5 inline mr-2" />
                                     ATUALIZAR
                                     {activeTab === 'update' && (
@@ -193,13 +392,6 @@ const WhatsAppBotLogin = () => {
                                 </button>
                             </div>
                         </div>
-
-                        {/* Exibir mensagem de erro se houver */}
-                        {error && (
-                            <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-                                {error}
-                            </div>
-                        )}
 
                         <div className="bg-white bg-opacity-95 backdrop-blur-lg rounded-3xl shadow-2xl border border-white border-opacity-50 overflow-hidden"> 
                             {activeTab === 'login' && (
@@ -213,18 +405,34 @@ const WhatsAppBotLogin = () => {
                                     </div>
                                     
                                     <div className="space-y-6">
+                                        {/* Campo Nome */}
                                         <div className="relative">
-                                            <label className="block text-sm font-bold text-orange-800 mb-3">Nome / Nickname</label>
+                                            <label className="block text-sm font-bold text-orange-800 mb-3">
+                                                <User className="w-4 h-4 inline mr-2" />
+                                                Nome / Apelido
+                                            </label>
                                             <input 
                                                 type="text" 
                                                 value={loginData.name} 
-                                                onChange={(e) => setLoginData({...loginData, name: e.target.value})} 
-                                                className="w-full px-6 py-4 border-2 border-yellow-300 rounded-2xl focus:border-orange-500 focus:outline-none transition-all duration-300 bg-gradient-to-r from-yellow-50 to-orange-50 text-red-900 placeholder-orange-400 text-lg shadow-inner hover:shadow-lg transform hover:scale-105" 
-                                                placeholder="Digite seu nome ou nick"
+                                                onChange={handleNameChange}
+                                                className={`w-full px-6 py-4 border-2 rounded-2xl focus:outline-none transition-all duration-300 bg-gradient-to-r from-yellow-50 to-orange-50 text-red-900 placeholder-orange-400 text-lg shadow-inner hover:shadow-lg ${
+                                                    errors.name ? 'border-red-500 focus:border-red-600' : 'border-yellow-300 focus:border-orange-500'
+                                                }`}
+                                                placeholder="Seu nome ou apelido"
                                                 disabled={isLoading}
                                             />
+                                            {errors.name && (
+                                                <p className="text-red-600 text-sm mt-2 flex items-center">
+                                                    <AlertCircle className="w-4 h-4 mr-1" />
+                                                    {errors.name}
+                                                </p>
+                                            )}
+                                            <p className="text-xs text-orange-600 mt-1 font-semibold">
+                                                 Digite apenas seu NOME, não email
+                                            </p>
                                         </div>
                                         
+                                        {/* Campo Telefone */}
                                         <div className="relative">
                                             <label className="block text-sm font-bold text-orange-800 mb-3">
                                                 <Phone className="w-4 h-4 inline mr-2" />
@@ -233,19 +441,34 @@ const WhatsAppBotLogin = () => {
                                             <input 
                                                 type="tel" 
                                                 value={loginData.phone} 
-                                                onChange={(e) => setLoginData({...loginData, phone: e.target.value})}
-                                                className="w-full px-6 py-4 border-2 border-yellow-300 rounded-2xl focus:border-orange-500 focus:outline-none transition-all duration-300 bg-gradient-to-r from-yellow-50 to-orange-50 text-red-900 placeholder-orange-400 text-lg shadow-inner hover:shadow-lg transform hover:scale-105"
-                                                placeholder="+55 (11) 99999-9999"
+                                                onChange={(e) => handlePhoneChange(e, false)}
+                                                className={`w-full px-6 py-4 border-2 rounded-2xl focus:outline-none transition-all duration-300 bg-gradient-to-r from-yellow-50 to-orange-50 text-red-900 placeholder-orange-400 text-lg shadow-inner hover:shadow-lg ${
+                                                    errors.phone ? 'border-red-500 focus:border-red-600' : 'border-yellow-300 focus:border-orange-500'
+                                                }`}
+                                                placeholder="+55 (85) 99999-9999"
                                                 disabled={isLoading}
                                             />
+                                            {errors.phone && (
+                                                <p className="text-red-600 text-sm mt-2 flex items-center">
+                                                    <AlertCircle className="w-4 h-4 mr-1" />
+                                                    {errors.phone}
+                                                </p>
+                                            )}
+                                            <p className="text-xs text-orange-600 mt-1 font-semibold">
+                                                ℹUse o número do WhatsApp (com 9 da operadora)
+                                            </p>
                                         </div>
 
+                                        {/* Campo Dispositivo */}
                                         <div className="relative">
-                                            <label className="block text-sm font-bold text-orange-800 mb-3">Dispositivo</label>
+                                            <label className="block text-sm font-bold text-orange-800 mb-3">
+                                                <Smartphone className="w-4 h-4 inline mr-2" />
+                                                Dispositivo
+                                            </label>
                                             <select 
                                                 value={loginData.devices} 
                                                 onChange={(e) => setLoginData({...loginData, devices: e.target.value})} 
-                                                className="w-full px-6 py-4 border-2 border-yellow-300 rounded-2xl focus:border-orange-500 focus:outline-none transition-all duration-300 bg-gradient-to-r from-yellow-50 to-orange-50 text-red-900 text-lg shadow-inner hover:shadow-lg transform hover:scale-105 cursor-pointer"
+                                                className="w-full px-6 py-4 border-2 border-yellow-300 rounded-2xl focus:border-orange-500 focus:outline-none transition-all duration-300 bg-gradient-to-r from-yellow-50 to-orange-50 text-red-900 text-lg shadow-inner hover:shadow-lg cursor-pointer"
                                                 disabled={isLoading}
                                             > 
                                                 <option value="Android">Android</option>
@@ -257,7 +480,7 @@ const WhatsAppBotLogin = () => {
                                         <button 
                                             onClick={handleLogin} 
                                             disabled={isLoading} 
-                                            className="w-full bg-gradient-to-r from-green-500 via-green-600 to-emerald-600 text-white py-5 px-8 rounded-2xl font-bold text-lg hover:from-green-600 hover:to-emerald-700 transition-all duration-300 transform hover:scale-110 hover:-translate-y-1 shadow-2xl flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"> 
+                                            className="w-full bg-gradient-to-r from-green-500 via-green-600 to-emerald-600 text-white py-5 px-8 rounded-2xl font-bold text-lg hover:from-green-600 hover:to-emerald-700 transition-all duration-300 transform hover:scale-105 shadow-2xl flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"> 
                                             {isLoading ? (
                                                 <>
                                                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
@@ -265,7 +488,7 @@ const WhatsAppBotLogin = () => {
                                                 </>
                                             ) : (
                                                 <>
-                                                    <MessageCircle className="w-6 h-6 mr-3 animate-bounce" />
+                                                    <MessageCircle className="w-6 h-6 mr-3" />
                                                     CONECTAR AO BOT
                                                 </>
                                             )}
@@ -285,6 +508,7 @@ const WhatsAppBotLogin = () => {
                                     </div>
                                     
                                     <div className="space-y-6">
+                                        {/* Campo Telefone */}
                                         <div className="relative">
                                             <label className="block text-sm font-bold text-orange-800 mb-3"> 
                                                 <Phone className="w-4 h-4 inline mr-2" />
@@ -293,21 +517,34 @@ const WhatsAppBotLogin = () => {
                                             <input 
                                                 type="tel" 
                                                 value={update.phone} 
-                                                onChange={(e) => setUpdate({...update, phone: e.target.value})}
-                                                className="w-full px-6 py-4 border-2 border-yellow-300 rounded-2xl focus:border-orange-500 focus:outline-none transition-all duration-300 bg-gradient-to-r from-yellow-50 to-orange-50 text-red-900 placeholder-orange-400 text-lg shadow-inner hover:shadow-lg transform hover:scale-105"
-                                                placeholder="+55 (11) 99999-9999"
+                                                onChange={(e) => handlePhoneChange(e, true)}
+                                                className={`w-full px-6 py-4 border-2 rounded-2xl focus:outline-none transition-all duration-300 bg-gradient-to-r from-yellow-50 to-orange-50 text-red-900 placeholder-orange-400 text-lg shadow-inner hover:shadow-lg ${
+                                                    errors.updatePhone ? 'border-red-500 focus:border-red-600' : 'border-yellow-300 focus:border-orange-500'
+                                                }`}
+                                                placeholder="+55 (85) 99999-9999"
                                                 disabled={isLoading}
                                             />
+                                            {errors.updatePhone && (
+                                                <p className="text-red-600 text-sm mt-2 flex items-center">
+                                                    <AlertCircle className="w-4 h-4 mr-1" />
+                                                    {errors.updatePhone}
+                                                </p>
+                                            )}
+                                            <p className="text-xs text-orange-600 mt-1 font-semibold">
+                                                ℹUse o número do WhatsApp cadastrado
+                                            </p>
                                         </div>
                                         
+                                        {/* Campo Novo Dispositivo */}
                                         <div className="relative"> 
                                             <label className="block text-sm font-bold text-orange-800 mb-3">
+                                                <Smartphone className="w-4 h-4 inline mr-2" />
                                                 Novo Dispositivo
                                             </label>
                                             <select 
                                                 value={update.newDevices} 
                                                 onChange={(e) => setUpdate({...update, newDevices: e.target.value})}
-                                                className="w-full px-6 py-4 border-2 border-yellow-300 rounded-2xl focus:border-orange-500 focus:outline-none transition-all duration-300 bg-gradient-to-r from-yellow-50 to-orange-50 text-red-900 text-lg shadow-inner hover:shadow-lg transform hover:scale-105 cursor-pointer"
+                                                className="w-full px-6 py-4 border-2 border-yellow-300 rounded-2xl focus:border-orange-500 focus:outline-none transition-all duration-300 bg-gradient-to-r from-yellow-50 to-orange-50 text-red-900 text-lg shadow-inner hover:shadow-lg cursor-pointer"
                                                 disabled={isLoading}
                                             > 
                                                 <option value="Android">Android</option>
@@ -319,7 +556,7 @@ const WhatsAppBotLogin = () => {
                                         <button 
                                             onClick={handleUpdate} 
                                             disabled={isLoading}
-                                            className="w-full bg-gradient-to-r from-orange-500 via-red-500 to-red-600 text-white py-5 px-8 rounded-2xl font-bold text-lg hover:from-orange-600 hover:to-red-700 transition-all duration-300 transform hover:scale-110 hover:-translate-y-1 shadow-2xl flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                                            className="w-full bg-gradient-to-r from-orange-500 via-red-500 to-red-600 text-white py-5 px-8 rounded-2xl font-bold text-lg hover:from-orange-600 hover:to-red-700 transition-all duration-300 transform hover:scale-105 shadow-2xl flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
                                             {isLoading ? (
                                                 <>
                                                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
@@ -327,7 +564,7 @@ const WhatsAppBotLogin = () => {
                                                 </>
                                             ) : (
                                                 <>
-                                                    <RefreshCw className="w-6 h-6 mr-3 animate-bounce" />
+                                                    <RefreshCw className="w-6 h-6 mr-3" />
                                                     ATUALIZAR DISPOSITIVO
                                                 </>
                                             )}

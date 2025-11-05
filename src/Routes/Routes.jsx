@@ -4,6 +4,7 @@ import Header from '../Componestes/Header';
 import Sobre from '../Pages/Sobre';
 import WhatsAppBotLogin from '../Pages/LoginBot';
 import PaymentPage from '../Pages/Pagamentos';
+import Dashboard from '../Pages/PainelApi';
 
 const AppRoute = () => {
     return ( 
@@ -16,6 +17,7 @@ const AppRoute = () => {
         </Route>
          <Route path='/loginBot' element={<WhatsAppBotLogin />} />
          <Route path='/consumo' element={<PaymentPage />} />
+         <Route path='/api' element={<Dashboard />} />
     </Routes>
     </BrowserRouter> );
 }
