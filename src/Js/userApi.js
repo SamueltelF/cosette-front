@@ -1,20 +1,23 @@
 import { useState } from 'react';
 
-const API_BASE_URL = 'https://cosette.uno/api/bot'; // Ajuste conforme necessário
+// ✅ URL correta do backend principal
+const API_BASE_URL = 'http://localhost:8080/api/bot';
 
 export const useApi = () => {
-    const [isLoading, setIsLoading] = useState(false)
-    const [error, setError] = useState(null)
-
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState(null);
     
-    const clearError = () => setError(null)
+    const clearError = () => setError(null);
 
-    // Função para adicionar usuário (login)
+    // ✅ Função para adicionar usuário (login/cadastro)
     const addUser = async (userData) => {
         setIsLoading(true);
         setError(null);
         
         try {
+            console.log('📤 Enviando dados para cadastro:', userData);
+            
+            // ✅ CORRIGIDO: fetch com parênteses
             const response = await fetch(`${API_BASE_URL}/add`, {
                 method: 'POST',
                 headers: {
@@ -25,9 +28,10 @@ export const useApi = () => {
                     phone: userData.phone,
                     devices: userData.devices
                 })
-            })
+            });
 
             const data = await response.json();
+            console.log('📥 Resposta do servidor:', data);
             
             if (!response.ok) {
                 throw new Error(data.mensagem || 'Erro na requisição');
@@ -38,24 +42,28 @@ export const useApi = () => {
                 throw new Error(data.mensagem || 'Operação não foi bem-sucedida');
             }
 
-            return data
+            console.log('✅ Usuário adicionado com sucesso!');
+            return data;
             
         } catch (error) {
-            console.error('Erro ao adicionar usuário:', error)
-            const errorMessage = error.message || 'Erro de conexão com o servidor'
-            setError(errorMessage)
-            throw new Error(errorMessage)
+            console.error('❌ Erro ao adicionar usuário:', error);
+            const errorMessage = error.message || 'Erro de conexão com o servidor';
+            setError(errorMessage);
+            throw new Error(errorMessage);
         } finally {
-            setIsLoading(false)
+            setIsLoading(false);
         }
     };
 
-    // Função para atualizar usuário
+    // ✅ Função para atualizar usuário
     const updateUser = async (updateData) => {
-        setIsLoading(true)
-        setError(null)
+        setIsLoading(true);
+        setError(null);
         
         try {
+            console.log('📤 Enviando dados para atualização:', updateData);
+            
+            // ✅ CORRIGIDO: fetch com parênteses
             const response = await fetch(`${API_BASE_URL}/atualizar`, {
                 method: 'PUT',
                 headers: {
@@ -65,64 +73,111 @@ export const useApi = () => {
                     phone: updateData.phone,
                     newDevices: updateData.newDevices
                 })
-            })
+            });
 
-            const data = await response.json()
+            const data = await response.json();
+            console.log('📥 Resposta do servidor:', data);
             
             if (!response.ok) {
-                throw new Error(data.mensagem || 'Erro na requisição')
+                throw new Error(data.mensagem || 'Erro na requisição');
             }
 
             // Verificar se a operação foi bem-sucedida
             if (!data.sucesso) {
-                throw new Error(data.mensagem || 'Operação não foi bem-sucedida')
+                throw new Error(data.mensagem || 'Operação não foi bem-sucedida');
             }
 
-            return data
+            console.log('✅ Usuário atualizado com sucesso!');
+            return data;
             
         } catch (error) {
-            console.error('Erro ao atualizar usuário:', error)
-            const errorMessage = error.message || 'Erro de conexão com o servidor'
-            setError(errorMessage)
-            throw new Error(errorMessage)
+            console.error('❌ Erro ao atualizar usuário:', error);
+            const errorMessage = error.message || 'Erro de conexão com o servidor';
+            setError(errorMessage);
+            throw new Error(errorMessage);
         } finally {
-            setIsLoading(false)
+            setIsLoading(false);
         }
     };
 
-    // Função para listar usuários (útil para debug)
+    // ✅ Função para listar usuários
     const listUsers = async () => {
-        setIsLoading(true)
-        setError(null)
+        setIsLoading(true);
+        setError(null);
         
         try {
-            const response = await fetch(`${API_BASE_URL}/usuarios`)
-            const data = await response.json()
+            console.log('📤 Buscando lista de usuários...');
+            
+            // ✅ CORRIGIDO: fetch com parênteses
+            const response = await fetch(`${API_BASE_URL}/usuarios`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            const data = await response.json();
+            console.log('📥 Resposta do servidor:', data);
             
             if (!response.ok) {
-                throw new Error(data.mensagem || 'Erro na requisição')
+                throw new Error(data.mensagem || 'Erro na requisição');
             }
 
-            return data
+            console.log('✅ Usuários listados com sucesso!');
+            return data;
             
         } catch (error) {
-            console.error('Erro ao listar usuários:', error)
-            const errorMessage = error.message || 'Erro de conexão com o servidor'
-            setError(errorMessage)
-            throw new Error(errorMessage)
+            console.error('❌ Erro ao listar usuários:', error);
+            const errorMessage = error.message || 'Erro de conexão com o servidor';
+            setError(errorMessage);
+            throw new Error(errorMessage);
         } finally {
-            setIsLoading(false)
+            setIsLoading(false);
         }
     };
 
-    
+    // ✅ Função para pesquisar se número existe
+    const searchUser = async (phone) => {
+        setIsLoading(true);
+        setError(null);
+        
+        try {
+            console.log('🔍 Pesquisando número:', phone);
+            
+            const response = await fetch(`${API_BASE_URL}/pesquisar-numero`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ numero: phone })
+            });
 
+            const data = await response.json();
+            console.log('📥 Resultado da pesquisa:', data);
+            
+            if (!response.ok) {
+                throw new Error(data.mensagem || 'Erro na requisição');
+            }
+
+            return data;
+            
+        } catch (error) {
+            console.error('❌ Erro ao pesquisar usuário:', error);
+            const errorMessage = error.message || 'Erro de conexão com o servidor';
+            setError(errorMessage);
+            throw new Error(errorMessage);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    
     return {
         isLoading,
         error,
         clearError,
         addUser,
         updateUser,
-        listUsers
+        listUsers,
+        searchUser
     };
 };

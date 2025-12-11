@@ -1,11 +1,14 @@
 import { MessageCircle, Phone, RefreshCw, Shield, Smartphone, User, Zap, Globe, AlertCircle, CheckCircle } from "lucide-react";
 import { useEffect, useState } from "react"; 
+import { useApi } from '../Js/userApi'; // ✅ IMPORTA O HOOK
 
 const WhatsAppBotLogin = () => {
     const [activeTab, setActiveTab] = useState('login')
     const [particula, setParticula] = useState([])
     const [errors, setErrors] = useState({})
-    const [isLoading, setIsLoading] = useState(false)
+    
+    // ✅ USA O HOOK useApi
+    const { isLoading, error, clearError, addUser, updateUser } = useApi()
 
     const [loginData, setLoginData] = useState({
         name: '',
@@ -33,9 +36,16 @@ const WhatsAppBotLogin = () => {
         setParticula(newParticulas)
     }, [])
 
+    // ✅ Mostra erro da API se houver
+    useEffect(() => {
+        if (error) {
+            alert('Erro: ' + error)
+            clearError()
+        }
+    }, [error, clearError])
+
     // ========== VALIDAÇÕES ==========
     
-    // Valida se é um nome real (não email)
     const validateName = (name) => {
         const trimmedName = name.trim()
         
@@ -47,17 +57,14 @@ const WhatsAppBotLogin = () => {
             return { valid: false, message: 'Nome deve ter pelo menos 3 caracteres' }
         }
         
-        // Verifica se contém @ (email)
         if (trimmedName.includes('@')) {
             return { valid: false, message: 'Por favor, digite seu NOME, não email' }
         }
         
-        // Verifica se tem formato de email mesmo sem @
         if (/^\S+@?\S+\.\S+$/.test(trimmedName)) {
             return { valid: false, message: 'Digite apenas seu nome ou apelido' }
         }
         
-        // Verifica se tem números demais (provavelmente telefone)
         const numberCount = (trimmedName.match(/\d/g) || []).length
         if (numberCount > 3) {
             return { valid: false, message: 'Nome não pode conter muitos números' }
@@ -66,41 +73,32 @@ const WhatsAppBotLogin = () => {
         return { valid: true }
     }
 
-    // Normaliza número do WhatsApp (adiciona 9 se necessário)
     const normalizeWhatsAppNumber = (phone) => {
-        // Remove tudo exceto números
         let numbers = phone.replace(/\D/g, '')
         
-        // Remove 55 se já existe
         if (numbers.startsWith('55')) {
             numbers = numbers.slice(2)
         }
         
-        // Deve ter DDD (2 dígitos) + número (8 ou 9 dígitos)
         if (numbers.length < 10) {
             return { valid: false, message: 'Número incompleto' }
         }
         
-        // Extrai DDD e número
         const ddd = numbers.slice(0, 2)
         let numero = numbers.slice(2)
         
-        // Se o número tem 8 dígitos, adiciona 9 na frente
         if (numero.length === 8) {
             numero = '9' + numero
         }
         
-        // Verifica se ficou com 9 dígitos
         if (numero.length !== 9) {
             return { valid: false, message: 'Número deve ter 9 dígitos (com o 9 da operadora)' }
         }
         
-        // Verifica se começa com 9
         if (!numero.startsWith('9')) {
             return { valid: false, message: 'Número deve começar com 9 (celular)' }
         }
         
-        // Monta número completo: 55 + DDD + número (9 dígitos)
         const fullNumber = '55' + ddd + numero
         
         return { 
@@ -110,7 +108,6 @@ const WhatsAppBotLogin = () => {
         }
     }
 
-    // Valida número do WhatsApp
     const validatePhone = (phone) => {
         const trimmedPhone = phone.trim()
         
@@ -124,20 +121,42 @@ const WhatsAppBotLogin = () => {
     // ========== FORMATAÇÃO ==========
     
     const formatPhoneInput = (value) => {
-        let numbers = value.replace(/\D/g, '')
+        const numbers = value.replace(/\D/g, '');
+        const limited = numbers.slice(0, 13);
         
-        // Remove 55 inicial para formatação
-        if (numbers.startsWith('55') && numbers.length > 2) {
-            numbers = numbers.slice(2)
+        if (limited.length === 0) return '';
+        
+        let formatted = '';
+        
+        if (limited.length >= 1) {
+            formatted = '+55';
         }
         
-        // Limita a 11 dígitos (DDD + 9 dígitos)
-        numbers = numbers.slice(0, 11)
+        if (limited.length > 2) {
+            formatted += ' ';
+        }
         
-        if (numbers.length === 0) return ''
-        if (numbers.length <= 2) return `+55 (${numbers}`
-        if (numbers.length <= 7) return `+55 (${numbers.slice(0, 2)}) ${numbers.slice(2)}`
-        return `+55 (${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7)}`
+        if (limited.length > 2) {
+            formatted += '(' + limited.slice(2, 4);
+        }
+        
+        if (limited.length >= 4) {
+            formatted += ')';
+        }
+        
+        if (limited.length > 4) {
+            formatted += ' ';
+        }
+        
+        if (limited.length > 4) {
+            formatted += limited.slice(4, 9);
+        }
+        
+        if (limited.length > 9) {
+            formatted += '-' + limited.slice(9, 13);
+        }
+        
+        return formatted;
     }
 
     // ========== HANDLERS ==========
@@ -146,38 +165,57 @@ const WhatsAppBotLogin = () => {
         const value = e.target.value
         setLoginData({...loginData, name: value})
         
-        // Remove erro ao começar a digitar
         if (errors.name) {
             setErrors({...errors, name: ''})
         }
     }
 
     const handlePhoneChange = (e, isUpdate = false) => {
-        const formatted = formatPhoneInput(e.target.value)
+        const value = e.target.value;
+        const currentPhone = isUpdate ? update.phone : loginData.phone;
+        
+        if (value.length < currentPhone.length) {
+            const numbers = value.replace(/\D/g, '');
+            const formatted = formatPhoneInput(numbers);
+            
+            if (isUpdate) {
+                setUpdate({...update, phone: formatted});
+                if (errors.updatePhone) {
+                    setErrors({...errors, updatePhone: ''});
+                }
+            } else {
+                setLoginData({...loginData, phone: formatted});
+                if (errors.phone) {
+                    setErrors({...errors, phone: ''});
+                }
+            }
+            return;
+        }
+        
+        const formatted = formatPhoneInput(value);
         
         if (isUpdate) {
-            setUpdate({...update, phone: formatted})
+            setUpdate({...update, phone: formatted});
             if (errors.updatePhone) {
-                setErrors({...errors, updatePhone: ''})
+                setErrors({...errors, updatePhone: ''});
             }
         } else {
-            setLoginData({...loginData, phone: formatted})
+            setLoginData({...loginData, phone: formatted});
             if (errors.phone) {
-                setErrors({...errors, phone: ''})
+                setErrors({...errors, phone: ''});
             }
         }
     }
 
+    // ✅ CONECTA COM API REAL
     const handleLogin = async () => {
         const newErrors = {}
         
-        // Valida nome
         const nameValidation = validateName(loginData.name)
         if (!nameValidation.valid) {
             newErrors.name = nameValidation.message
         }
         
-        // Valida e normaliza telefone
         const phoneValidation = validatePhone(loginData.phone)
         if (!phoneValidation.valid) {
             newErrors.phone = phoneValidation.message
@@ -188,41 +226,41 @@ const WhatsAppBotLogin = () => {
             return
         }
         
-        setIsLoading(true)
-        
         try {
-            // Dados para enviar à API
+            // ✅ DADOS ENVIADOS PARA API
             const dataToSend = {
                 name: loginData.name.trim(),
-                phone: phoneValidation.normalized, // Número normalizado: 5585999999999
+                phone: phoneValidation.normalized, // Ex: 5585999999999
                 devices: loginData.devices
             }
             
-            //console.log('Dados enviados para API:', dataToSend)
+            console.log('📤 Enviando para API:', dataToSend)
             
-            // Simula chamada API (substitua pela sua função real)
-            // const response = await addUser(dataToSend)
+            // ✅ CHAMA API REAL
+            const response = await addUser(dataToSend)
             
-            // Simulação
-            await new Promise(resolve => setTimeout(resolve, 2000))
+            console.log('✅ Resposta da API:', response)
             
-            alert(`Login realizado com sucesso!\n\nNome: ${dataToSend.name}\nWhatsApp: ${phoneValidation.formatted}\nDispositivo: ${dataToSend.devices}`)
-            
-            // Limpa formulário
-            setLoginData({ name: '', phone: '', devices: 'Android' })
-            setErrors({})
+            if (response.sucesso) {
+                alert(`✅ ${response.mensagem}\n\nNome: ${response.usuario.nome}\nWhatsApp: ${phoneValidation.formatted}\nDispositivo: ${response.usuario.sistema}\nConsumo: ${response.usuario.consumo} créditos`)
+                
+                // Limpa formulário
+                setLoginData({ name: '', phone: '', devices: 'Android' })
+                setErrors({})
+            } else {
+                alert('❌ ' + response.mensagem)
+            }
             
         } catch (error) {
-            alert('Erro ao fazer login: ' + error.message)
-        } finally {
-            setIsLoading(false)
+            console.error('❌ Erro no handleLogin:', error)
+            alert('❌ Erro ao fazer login: ' + error.message)
         }
     }
 
+    // ✅ CONECTA COM API REAL
     const handleUpdate = async () => {
         const newErrors = {}
         
-        // Valida e normaliza telefone
         const phoneValidation = validatePhone(update.phone)
         if (!phoneValidation.valid) {
             newErrors.updatePhone = phoneValidation.message
@@ -233,31 +271,32 @@ const WhatsAppBotLogin = () => {
             return
         }
         
-        setIsLoading(true)
-        
         try {
-            // Dados para enviar à API
+            // ✅ DADOS ENVIADOS PARA API
             const dataToSend = {
-                phone: phoneValidation.normalized, // Número normalizado
+                phone: phoneValidation.normalized, // Ex: 5585999999999
                 newDevices: update.newDevices
             }
             
-            //console.log('📤 Dados enviados para API:', dataToSend)
+            console.log('📤 Enviando para API:', dataToSend)
             
-            // Simula chamada API
-            // const response = await updateUser(dataToSend)
+            // ✅ CHAMA API REAL
+            const response = await updateUser(dataToSend)
             
-            await new Promise(resolve => setTimeout(resolve, 2000))
+            console.log('✅ Resposta da API:', response)
             
-            alert(`Dispositivo atualizado com sucesso!\n\nWhatsApp: ${phoneValidation.formatted}\nNovo Dispositivo: ${dataToSend.newDevices}`)
-            
-            setUpdate({ phone: '', newDevices: 'Android' })
-            setErrors({})
+            if (response.sucesso) {
+                alert(`✅ ${response.mensagem}\n\nWhatsApp: ${phoneValidation.formatted}\nNovo Dispositivo: ${response.usuario.sistema}`)
+                
+                setUpdate({ phone: '', newDevices: 'Android' })
+                setErrors({})
+            } else {
+                alert('❌ ' + response.mensagem)
+            }
             
         } catch (error) {
-            alert('Erro ao atualizar: ' + error.message)
-        } finally {
-            setIsLoading(false)
+            console.error('❌ Erro no handleUpdate:', error)
+            alert('❌ Erro ao atualizar: ' + error.message)
         }
     }
 
@@ -338,7 +377,6 @@ const WhatsAppBotLogin = () => {
                     <div className="absolute inset-0 bg-gradient-to-tr from-red-600 via-transparent to-amber-400 opacity-40"></div>
                 </div>
 
-                {/* particulas flutuantes */}
                 <div className="absolute inset-0">
                     {particula.map((particulas) => (
                         <div key={particulas.id} className="absolute rounded-full bg-white opacity-20 animate-float-random" 
@@ -354,7 +392,6 @@ const WhatsAppBotLogin = () => {
                     ))}
                 </div>
 
-                {/* elementos decorativos */}
                 <div className="absolute top-0 left-0 w-96 h-96 bg-gradient-to-br from-yellow-300 to-transparent rounded-full opacity-10 -translate-x-1/2 -translate-y-1/2 animate-spin-very-slow"></div> 
                 <div className="absolute bottom-0 right-0 w-80 h-80 bg-gradient-to-tl from-red-500 to-transparent rounded-full opacity-15 translate-x-1/2 translate-y-1/2 animate-pulse-slow"></div> 
             
@@ -405,7 +442,6 @@ const WhatsAppBotLogin = () => {
                                     </div>
                                     
                                     <div className="space-y-6">
-                                        {/* Campo Nome */}
                                         <div className="relative">
                                             <label className="block text-sm font-bold text-orange-800 mb-3">
                                                 <User className="w-4 h-4 inline mr-2" />
@@ -428,11 +464,10 @@ const WhatsAppBotLogin = () => {
                                                 </p>
                                             )}
                                             <p className="text-xs text-orange-600 mt-1 font-semibold">
-                                                 Digite apenas seu NOME, não email
+                                                ℹ️ Digite apenas seu NOME, não email
                                             </p>
                                         </div>
                                         
-                                        {/* Campo Telefone */}
                                         <div className="relative">
                                             <label className="block text-sm font-bold text-orange-800 mb-3">
                                                 <Phone className="w-4 h-4 inline mr-2" />
@@ -447,6 +482,7 @@ const WhatsAppBotLogin = () => {
                                                 }`}
                                                 placeholder="+55 (85) 99999-9999"
                                                 disabled={isLoading}
+                                                inputMode="numeric"
                                             />
                                             {errors.phone && (
                                                 <p className="text-red-600 text-sm mt-2 flex items-center">
@@ -455,11 +491,10 @@ const WhatsAppBotLogin = () => {
                                                 </p>
                                             )}
                                             <p className="text-xs text-orange-600 mt-1 font-semibold">
-                                                ℹUse o número do WhatsApp (com 9 da operadora)
+                                                ℹ️ Use o número do WhatsApp (com 9 da operadora)
                                             </p>
                                         </div>
 
-                                        {/* Campo Dispositivo */}
                                         <div className="relative">
                                             <label className="block text-sm font-bold text-orange-800 mb-3">
                                                 <Smartphone className="w-4 h-4 inline mr-2" />
@@ -508,7 +543,6 @@ const WhatsAppBotLogin = () => {
                                     </div>
                                     
                                     <div className="space-y-6">
-                                        {/* Campo Telefone */}
                                         <div className="relative">
                                             <label className="block text-sm font-bold text-orange-800 mb-3"> 
                                                 <Phone className="w-4 h-4 inline mr-2" />
@@ -523,6 +557,7 @@ const WhatsAppBotLogin = () => {
                                                 }`}
                                                 placeholder="+55 (85) 99999-9999"
                                                 disabled={isLoading}
+                                                inputMode="numeric"
                                             />
                                             {errors.updatePhone && (
                                                 <p className="text-red-600 text-sm mt-2 flex items-center">
@@ -531,11 +566,10 @@ const WhatsAppBotLogin = () => {
                                                 </p>
                                             )}
                                             <p className="text-xs text-orange-600 mt-1 font-semibold">
-                                                ℹUse o número do WhatsApp cadastrado
+                                                ℹ️ Use o número do WhatsApp cadastrado
                                             </p>
                                         </div>
                                         
-                                        {/* Campo Novo Dispositivo */}
                                         <div className="relative"> 
                                             <label className="block text-sm font-bold text-orange-800 mb-3">
                                                 <Smartphone className="w-4 h-4 inline mr-2" />

@@ -1,5 +1,7 @@
-import { Zap, Crown, CheckCircle, AlertCircle, Clock, Check, Phone, ArrowLeft, QrCode, Copy, Mail, Loader2 } from "lucide-react";
+import { Zap, Crown, CheckCircle, AlertCircle, Clock, Check, Phone, ArrowLeft, QrCode, Copy, Mail, Loader2, UserCheck } from "lucide-react";
 import { useState } from "react";
+// ✅ IMPORTA AS FUNÇÕES DA API
+import { pesquisarNumero, gerarPagamento, iniciarVerificacaoAutomatica } from '../API/pagamentos';
 
 const Pagamentos = () => {
 const [activeStep, setActiveStep] = useState('planos')
@@ -9,11 +11,12 @@ const [phoneNumber, setPhoneNumber] = useState('')
 const [copy, setCopy] = useState(false)
 const [paymentStatus, setPaymentStatus] = useState(null)
 const [statusMessage, setStatusMessage] = useState('')
-const [isChecking, setIsChecking] = useState(false)
 const [loading, setLoading] = useState(false)
 const [errors, setErrors] = useState({})
+const [pixData, setPixData] = useState(null)
+const [userRegistered, setUserRegistered] = useState(false)
+const [checkingUser, setCheckingUser] = useState(false)
 
-// Dados dos planos
 const planos = [{
     id: 1,
     price: 3.00,
@@ -51,7 +54,6 @@ const planos = [{
     bgColor: 'bg-gradient-to-br from-red-100 to-red-200'
 }]
 
-// Validações
 const validateEmail = (email) => {
     const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     return regex.test(email)
@@ -59,31 +61,68 @@ const validateEmail = (email) => {
 
 const validatePhone = (phone) => {
     const numbers = phone.replace(/\D/g, '')
-    return numbers.length >= 12 && numbers.length <= 13 // 55 + DDD + número
+    return numbers.length >= 12 && numbers.length <= 13
 }
 
-// Formatação de telefone CORRIGIDA
+const extractPhoneNumbers = (phone) => {
+    let numbers = phone.replace(/\D/g, '')
+    if (!numbers.startsWith('55')) {
+        numbers = '55' + numbers
+    }
+    return numbers
+}
+
 const formatPhone = (value) => {
     let numbers = value.replace(/\D/g, '')
-    
-    // Remove 55 inicial se já existe para evitar duplicação
     if (numbers.startsWith('55') && numbers.length > 2) {
         numbers = numbers.slice(2)
     }
-    
-    // Limita a 11 dígitos (DDD + número)
     numbers = numbers.slice(0, 11)
-    
-    // Formatação visual: +55 (XX) XXXXX-XXXX
     if (numbers.length === 0) return ''
     if (numbers.length <= 2) return `+55 (${numbers}`
     if (numbers.length <= 7) return `+55 (${numbers.slice(0, 2)}) ${numbers.slice(2)}`
     return `+55 (${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7)}`
 }
 
+// ✅ VERIFICAR SE USUÁRIO ESTÁ CADASTRADO (USA API IMPORTADA)
+const checkUserRegistration = async (phone) => {
+    setCheckingUser(true)
+    setUserRegistered(false)
+    
+    try {
+        const phoneNumbers = extractPhoneNumbers(phone)
+        console.log('🔍 Verificando cadastro:', phoneNumbers)
+        
+        // ✅ USA FUNÇÃO IMPORTADA
+        const data = await pesquisarNumero(phoneNumbers)
+        console.log('📋 Resultado:', data)
+        
+        if (data.sucesso && data.encontrado) {
+            setUserRegistered(true)
+            setErrors({...errors, phone: ''})
+            return true
+        } else {
+            setUserRegistered(false)
+            setErrors({
+                ...errors, 
+                phone: '❌ Número não cadastrado! Faça o login primeiro na aba "Entrar"'
+            })
+            return false
+        }
+        
+    } catch (error) {
+        console.error('❌ Erro ao verificar:', error)
+        setErrors({...errors, phone: 'Erro ao verificar cadastro'})
+        return false
+    } finally {
+        setCheckingUser(false)
+    }
+}
+
 const handlePhoneChange = (e) => {
     const formatted = formatPhone(e.target.value)
     setPhoneNumber(formatted)
+    setUserRegistered(false)
     if (errors.phone) {
         setErrors({...errors, phone: ''})
     }
@@ -96,7 +135,6 @@ const handleEmailChange = (e) => {
     }
 }
 
-// Validação do formulário
 const validateForm = () => {
     const newErrors = {}
     
@@ -109,29 +147,88 @@ const validateForm = () => {
     if (!phoneNumber.trim()) {
         newErrors.phone = 'WhatsApp é obrigatório'
     } else if (!validatePhone(phoneNumber)) {
-        newErrors.phone = 'Número inválido (deve ter DDD + 9 dígitos)'
+        newErrors.phone = 'Número inválido'
     }
     
     if (!selectedPlan) {
         newErrors.plan = 'Selecione um plano'
     }
     
+    if (!userRegistered) {
+        newErrors.phone = 'Verifique se o número está cadastrado primeiro'
+    }
+    
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
 }
 
+// ✅ GERAR PAGAMENTO (USA API IMPORTADA)
 const handleSubmit = async () => {
     if (!validateForm()) return
     
     setLoading(true)
     
-    // Simula chamada API
-    setTimeout(() => {
-        setLoading(false)
+    try {
+        const telefoneNumeros = extractPhoneNumbers(phoneNumber)
+        
+        console.log('📤 Gerando pagamento:', {
+            valor: selectedPlan.price,
+            email,
+            telefone: telefoneNumeros,
+            consumo: selectedPlan.consumo
+        })
+        
+        // ✅ USA FUNÇÃO IMPORTADA
+        const resultado = await gerarPagamento(
+            selectedPlan.price,
+            email,
+            telefoneNumeros,
+            selectedPlan.consumo
+        )
+        
+        console.log('📦 Resultado recebido:', resultado)
+        
+        if (resultado.erro) {
+            alert(`❌ Erro ao gerar pagamento:\n${resultado.erro}`)
+            setLoading(false)
+            return
+        }
+        
+        if (!resultado.pixCode || !resultado.qrCode || !resultado.paymentId) {
+            console.error('❌ Dados incompletos:', resultado)
+            alert('❌ Erro: Dados do PIX incompletos')
+            setLoading(false)
+            return
+        }
+        
+        setPixData(resultado)
         setActiveStep('payment')
         setPaymentStatus('pending')
-        setStatusMessage('Aguardando pagamento...')
-    }, 2000)
+        setStatusMessage('⏳ Aguardando pagamento...')
+        
+        // ✅ INICIA VERIFICAÇÃO AUTOMÁTICA (USA FUNÇÃO IMPORTADA)
+        iniciarVerificacaoAutomatica(resultado.paymentId, (statusResult) => {
+            console.log('📊 Status atualizado:', statusResult)
+            
+            if (statusResult.status) {
+                setPaymentStatus(statusResult.status)
+                
+                if (statusResult.status === 'approved' || statusResult.status === 'processed') {
+                    setStatusMessage('✅ Pagamento aprovado! Créditos adicionados!')
+                } else if (statusResult.status === 'pending') {
+                    setStatusMessage('⏳ Aguardando pagamento...')
+                } else if (statusResult.status === 'rejected') {
+                    setStatusMessage('❌ Pagamento rejeitado')
+                }
+            }
+        }, 10000)
+        
+    } catch (error) {
+        console.error('❌ Erro no handleSubmit:', error)
+        alert(`❌ Erro ao processar pagamento:\n${error.message}`)
+    } finally {
+        setLoading(false)
+    }
 }
 
 const handleBack = () => {
@@ -140,6 +237,9 @@ const handleBack = () => {
     setEmail('')
     setPhoneNumber('')
     setErrors({})
+    setPixData(null)
+    setPaymentStatus(null)
+    setUserRegistered(false)
 }
 
 const handlePlanSelect = (plan) => {
@@ -150,9 +250,11 @@ const handlePlanSelect = (plan) => {
 }
 
 const copyPixCode = () => {
-    navigator.clipboard.writeText('00020126360014BR.GOV.BCB.PIX...')
-    setCopy(true)
-    setTimeout(() => setCopy(false), 2000)
+    if (pixData?.pixCode) {
+        navigator.clipboard.writeText(pixData.pixCode)
+        setCopy(true)
+        setTimeout(() => setCopy(false), 2000)
+    }
 }
 
 return ( 
@@ -173,7 +275,6 @@ return (
 
         {activeStep === 'planos' && (
             <div className="space-y-8">
-                {/* Grade de planos */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     {planos.map((plan) => {
                         const IconComponent = plan.icon
@@ -228,30 +329,28 @@ return (
                     })}
                 </div>
 
-                {/* Formulário MELHORADO */}
                 {selectedPlan && (
                     <div className="max-w-md mx-auto">
                         <div className="bg-white/95 backdrop-blur-sm rounded-2xl p-6 shadow-2xl border border-white/50">
                         <div className="text-center mb-6">
                             <h3 className="text-xl font-bold text-gray-800 mb-2">
-                                Plano Selecionado: R$ {selectedPlan.price.toFixed(2).replace('.', ',')}
+                                Plano: R$ {selectedPlan.price.toFixed(2).replace('.', ',')}
                             </h3>
                             <p className="text-gray-600">+{selectedPlan.consumo} consumo</p>
                         </div>
                         
                         <div className="space-y-4">
-                            {/* Campo Email */}
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-2">
                                     <Mail className="w-4 h-4 inline mr-2" />
-                                    Email para confirmação
+                                    Email
                                 </label>
                                 <input 
                                     type="email" 
                                     value={email} 
                                     onChange={handleEmailChange}
                                     className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none transition-all duration-300 text-gray-800 placeholder-gray-400 ${
-                                        errors.email ? 'border-red-500 focus:border-red-600' : 'border-gray-300 focus:border-blue-500'
+                                        errors.email ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'
                                     }`}
                                     placeholder="seu@email.com"
                                 />
@@ -263,48 +362,65 @@ return (
                                 )}
                             </div>
 
-                            {/* Campo WhatsApp */}
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-2">
                                     <Phone className="w-4 h-4 inline mr-2" />
-                                    Número do WhatsApp
+                                    WhatsApp Cadastrado
                                 </label>
-                                <input 
-                                    type="tel" 
-                                    value={phoneNumber} 
-                                    onChange={handlePhoneChange}
-                                    className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none transition-all duration-300 text-gray-800 placeholder-gray-400 ${
-                                        errors.phone ? 'border-red-500 focus:border-red-600' : 'border-gray-300 focus:border-blue-500'
-                                    }`}
-                                    placeholder="+55 (11) 99999-9999"
-                                />
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="tel" 
+                                        value={phoneNumber} 
+                                        onChange={handlePhoneChange}
+                                        className={`flex-1 px-4 py-3 border-2 rounded-xl focus:outline-none transition-all duration-300 text-gray-800 ${
+                                            errors.phone ? 'border-red-500' : 
+                                            userRegistered ? 'border-green-500' : 'border-gray-300 focus:border-blue-500'
+                                        }`}
+                                        placeholder="+55 (85) 99999-9999"
+                                    />
+                                    <button
+                                        onClick={() => checkUserRegistration(phoneNumber)}
+                                        disabled={!phoneNumber || checkingUser}
+                                        className={`px-4 py-3 rounded-xl font-bold text-white transition-all ${
+                                            userRegistered ? 'bg-green-500' : 'bg-blue-500 hover:bg-blue-600'
+                                        } disabled:opacity-50`}
+                                    >
+                                        {checkingUser ? <Loader2 className="w-5 h-5 animate-spin" /> :
+                                         userRegistered ? <UserCheck className="w-5 h-5" /> : 'Verificar'}
+                                    </button>
+                                </div>
                                 {errors.phone && (
                                     <p className="text-red-600 text-sm mt-1 flex items-center">
                                         <AlertCircle className="w-4 h-4 mr-1" />
                                         {errors.phone}
                                     </p>
                                 )}
+                                {userRegistered && (
+                                    <p className="text-green-600 text-sm mt-1 flex items-center">
+                                        <CheckCircle className="w-4 h-4 mr-1" />
+                                        ✅ Cadastro confirmado!
+                                    </p>
+                                )}
                                 <p className="text-xs text-gray-500 mt-1">
-                                    Use o mesmo número do seu WhatsApp cadastrado
+                                    ⚠️ Use o mesmo número que você fez login
                                 </p>
                             </div>
 
-                            {/* Botão de Submissão */}
                             <button 
                                 onClick={handleSubmit} 
-                                disabled={loading}
+                                disabled={loading || !userRegistered}
                                 className={`w-full py-4 rounded-xl font-bold text-lg text-white transition-all duration-300 transform hover:scale-105 hover:shadow-2xl flex items-center justify-center ${
-                                    loading ? 'opacity-50 cursor-not-allowed' : ''
+                                    loading || !userRegistered ? 'opacity-50 cursor-not-allowed' : ''
                                 }`}
                                 style={{background: 'linear-gradient(135deg, #732020, #BF3939)'}}
                             >
                                 {loading ? (
                                     <>
                                         <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                                        PROCESSANDO...
+                                        GERANDO PIX...
                                     </>
                                 ) : (
-                                    'CONFIRMAR E PAGAR'
+                                    'CONFIRMAR E GERAR PIX'
                                 )}
                             </button>
                         </div>
@@ -314,43 +430,41 @@ return (
             </div>
         )}
 
-        {/* Tela de pagamento */}
-        {activeStep === 'payment' && selectedPlan && (
+        {activeStep === 'payment' && selectedPlan && pixData && (
             <div className="max-w-2xl mx-auto">
                 <div className="bg-white/95 backdrop-blur-sm rounded-3xl p-8 shadow-2xl border border-white/50">
                 <button onClick={handleBack} className="flex items-center text-gray-600 hover:text-gray-800 mb-6 transition-colors">
                     <ArrowLeft className="w-5 h-5 mr-2" />
-                    Voltar ao pedido
+                    Voltar
                 </button>
                 
                 <div className="text-center mb-8 p-4 rounded-2xl" style={{backgroundColor: '#D9BAD1'}}>
-                    <h3 className="text-xl font-bold text-gray-800 mb-2">Resumo do Pedido</h3>
+                    <h3 className="text-xl font-bold text-gray-800 mb-2">Resumo</h3>
                     <div className="text-lg text-gray-700">
                         <span className="font-semibold">R$ {selectedPlan.price.toFixed(2).replace('.', ',')}</span>
                         <span className="mx-2">•</span>
                         <span>+{selectedPlan.consumo} Consumo</span>
                     </div>
                     <div className="text-sm text-gray-600 mt-1">
-                        Email: {email} • WhatsApp: {phoneNumber}
+                        {email} • {phoneNumber}
                     </div>
                 </div>
 
-                {/* Status do pagamento */}
                 {paymentStatus && (
                     <div className={`p-4 rounded-xl mb-6 ${
-                        paymentStatus === 'approved' ? 'bg-green-100' :
+                        paymentStatus === 'approved' || paymentStatus === 'processed' ? 'bg-green-100' :
                         paymentStatus === 'pending' ? 'bg-yellow-100' :
                         'bg-red-100'
                     }`}>
                         <div className="flex items-center">
-                            {paymentStatus === 'approved' ? 
+                            {paymentStatus === 'approved' || paymentStatus === 'processed' ? 
                                 <CheckCircle className="w-5 h-5 text-green-600 mr-2" /> :
                             paymentStatus === 'pending' ?
                                 <Clock className="w-5 h-5 text-yellow-600 mr-2" /> :
                                 <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
                             }
                             <span className={`font-semibold ${
-                                paymentStatus === 'approved' ? 'text-green-800' :
+                                paymentStatus === 'approved' || paymentStatus === 'processed' ? 'text-green-800' :
                                 paymentStatus === 'pending' ? 'text-yellow-800' :
                                 'text-red-800'
                             }`}>
@@ -361,42 +475,38 @@ return (
                 )}
 
                 <div className="grid md:grid-cols-2 gap-8">
-                   {/* QR Code */}
                    <div className="text-center">
                         <h4 className="text-lg font-bold text-gray-800 mb-4 flex items-center justify-center">
                             <QrCode className="w-5 h-5 mr-2" />
                             Escaneie o QR Code
                         </h4>
                         <div className="bg-white p-4 rounded-2xl shadow-lg inline-block">
-                            <div className="w-48 h-48 bg-gray-100 rounded-xl flex items-center justify-center">
-                                <div className="text-center text-gray-500">
-                                    <QrCode className="w-16 h-16 mx-auto mb-2" />
-                                    <p className="text-sm font-semibold">QR Code PIX</p>
-                                    <p className="text-xs">R$ {selectedPlan.price.toFixed(2)}</p>
-                                </div>
-                            </div>
+                            <img 
+                                src={pixData.qrCode} 
+                                alt="QR Code PIX" 
+                                className="w-48 h-48 rounded-xl"
+                            />
                         </div>
                     </div>
 
-                    {/* Código PIX */}
                    <div>
                         <h4 className="text-lg font-bold text-gray-800 mb-4">
                             Ou copie o código PIX
                         </h4>
-                        <div className="bg-gray-50 p-4 rounded-xl mb-4">
-                            <p className="text-sm text-gray-600 break-all font-mono">
-                                00020126360014BR.GOV.BCB.PIX...
+                        <div className="bg-gray-50 p-4 rounded-xl mb-4 max-h-32 overflow-y-auto">
+                            <p className="text-xs text-gray-600 break-all font-mono">
+                                {pixData.pixCode}
                             </p>
                         </div>
                         <button 
                             onClick={copyPixCode}
                             className={`w-full py-3 rounded-xl font-bold text-white transition-all duration-300 flex items-center justify-center ${
-                                copy ? 'bg-green-500 hover:bg-green-600' : 'hover:shadow-lg'
+                                copy ? 'bg-green-500' : 'hover:shadow-lg'
                             }`} 
                             style={{backgroundColor: copy ? undefined : "#732020"}}
                         >
                             <Copy className="w-5 h-5 mr-2" />
-                            {copy ? 'CÓDIGO COPIADO!' : 'COPIAR CÓDIGO PIX'}
+                            {copy ? 'COPIADO!' : 'COPIAR CÓDIGO'}
                         </button>
                     </div>
                 </div>
@@ -404,11 +514,11 @@ return (
                 <div className="mt-8 p-4 rounded-xl" style={{backgroundColor: '#BBE8F2'}}>
                     <h5 className="font-bold text-gray-800 mb-2">Como pagar:</h5>
                     <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1">
-                        <li>Abra seu app bancário ou carteira digital</li>
-                        <li>Escolha a opção PIX</li>
+                        <li>Abra seu app bancário</li>
+                        <li>Escolha PIX</li>
                         <li>Escaneie o QR Code ou cole o código</li>
-                        <li>Confirme o pagamento de R$ {selectedPlan.price.toFixed(2).replace('.', ',')}</li>
-                        <li>Seus créditos serão adicionados automaticamente</li>
+                        <li>Confirme R$ {selectedPlan.price.toFixed(2).replace('.', ',')}</li>
+                        <li>Créditos adicionados automaticamente ✅</li>
                     </ol>
                 </div>
                 </div>
@@ -423,20 +533,16 @@ return (
     0% { transform: translateX(-100%); }
     100% { transform: translateX(100%); }
 }
-
 .plan-card { 
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
 }
-
 .plan-card:hover { 
     transform: translateY(-8px) scale(1.02); 
 }
-
 .shine-effect { 
     position: relative; 
     overflow: hidden; 
 }
-
 .shine-effect::before {
     content: '';
     position: absolute;

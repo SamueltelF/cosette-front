@@ -1,21 +1,56 @@
+// ✅ URL CORRETA (sem /bot)
+const apiBack = 'http://localhost:8080/api/bot'
 
-var apiBack = 'https://cosette.uno/api/bot' // api do bank normal
+// ✅ FUNÇÃO AUXILIAR: Formatar número para padrão WhatsApp
+const formatarParaWhatsApp = (numero) => {
+    // Remove tudo que não é número
+    let numeroLimpo = numero.replace(/\D/g, '')
+    
+    // Garante que começa com 55 (código do Brasil)
+    if (!numeroLimpo.startsWith('55')) {
+        numeroLimpo = '55' + numeroLimpo
+    }
+    
+    // Adiciona o sufixo do WhatsApp se ainda não tiver
+    if (!numeroLimpo.includes('@s.whatsapp.net')) {
+        numeroLimpo = numeroLimpo + '@s.whatsapp.net'
+    }
+    
+    console.log('📞 Número formatado:', numeroLimpo)
+    return numeroLimpo
+}
 
+// ✅ Verificar se número está cadastrado
 export const pesquisarNumero = async (numero) => {
     try {
-        const responde = await fetch(`${apiBack}/pesquisar-numero`, {
+        console.log('🔍 [API] Pesquisando número original:', numero)
+        
+        // ✅ CONVERTE PARA FORMATO WHATSAPP ANTES DE ENVIAR
+        const numeroFormatado = formatarParaWhatsApp(numero)
+        console.log('📱 [API] Número formatado para WhatsApp:', numeroFormatado)
+        
+        const response = await fetch(`${apiBack}/pesquisar-numero`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ numero })
+            body: JSON.stringify({ numero: numeroFormatado })
         })
         
-        const data = await responde.json()
+        if (!response.ok) {
+            console.error(`❌ [API] Erro HTTP: ${response.status}`)
+            return { 
+                sucesso: false, 
+                mensagem: 'Erro ao conectar com servidor' 
+            }
+        }
+        
+        const data = await response.json()
+        console.log('✅ [API] Resultado da pesquisa:', data)
         return data
         
     } catch (erro) {
-        console.log('Erro ao pesquisar número:', erro)
+        console.error('💥 [API] Erro ao pesquisar número:', erro)
         return { 
             sucesso: false, 
             mensagem: 'Erro ao conectar com servidor' 
@@ -23,228 +58,214 @@ export const pesquisarNumero = async (numero) => {
     }
 }
 
-
-
-export const gerarPagamentos = async (valor, email, telefone, consumo) => {
+// ✅ Gerar pagamento PIX
+export const gerarPagamento = async (valor, email, telefone, consumo) => {
     try {
-        console.log('📤 Enviando requisição para API:', { valor, email, telefone, consumo });
+        console.log('📤 [API] Enviando requisição de pagamento (original):', { 
+            valor, 
+            email, 
+            telefone, 
+            consumo 
+        })
+        
+        // ✅ CONVERTE TELEFONE PARA FORMATO WHATSAPP
+        const telefoneFormatado = formatarParaWhatsApp(telefone)
+        console.log('📱 [API] Telefone formatado para WhatsApp:', telefoneFormatado)
         
         const response = await fetch(`${apiBack}/pagar`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ valor, email, telefone, consumo })
-        });
+            body: JSON.stringify({ 
+                valor, 
+                email, 
+                telefone: telefoneFormatado, // ✅ USA VERSÃO FORMATADA
+                consumo 
+            })
+        })
 
         if (!response.ok) {
-            console.error(`❌ Erro HTTP: ${response.status} - ${response.statusText}`);
+            console.error(`❌ [API] Erro HTTP: ${response.status}`)
+            const errorText = await response.text()
+            console.error('Resposta de erro:', errorText)
             return { 
                 erro: `Erro do servidor: ${response.status}`,
                 status: response.status 
-            };
+            }
         }
 
-        // 2. Verificar se há conteúdo na resposta
-        const contentType = response.headers.get('content-type');
-        console.log('Content-Type:', contentType);
-
+        const contentType = response.headers.get('content-type')
         if (!contentType || !contentType.includes('application/json')) {
-            console.warn('Resposta não é JSON válido');
-            const textResponse = await response.text();
-            console.log('Resposta como texto:', textResponse);
-            return { erro: 'Resposta inválida do servidor' };
+            console.warn('⚠️ [API] Resposta não é JSON')
+            const textResponse = await response.text()
+            console.log('Resposta como texto:', textResponse)
+            return { erro: 'Resposta inválida do servidor' }
         }
 
-        const data = await response.json();
+        const data = await response.json()
+        console.log('📦 [API] Dados recebidos:', data)
         
-        // 4. Verificar se os dados esperados existem
         if (!data) {
-            console.error('❌ Resposta vazia da API');
-            return { erro: 'Resposta vazia do servidor' };
+            console.error('❌ [API] Resposta vazia')
+            return { erro: 'Resposta vazia do servidor' }
         }
       
-        if (data.error || data.erro) {
-            console.error('❌ Erro retornado pela API:', data.error || data.erro);
+        if (data.erro || data.error) {
+            console.error('❌ [API] Erro retornado:', data.erro || data.error)
             return { 
-                erro: data.error || data.erro,
+                erro: data.erro || data.error,
+                detalhes: data.detalhes,
                 dadosCompletos: data 
-            };
+            }
         }
 
-        // 7. Validar dados obrigatórios antes de processar
-        if (data.qr_code && data.qr_image) {
-            console.log('✅ Dados válidos recebidos, processando...');
+        // ✅ Validar dados obrigatórios do PIX
+        if (data.qr_code && data.qr_image && data.payment_id) {
+            console.log('✅ [API] Dados PIX válidos!')
             
-            // Validar se qr_code não está vazio
             if (!data.qr_code.trim()) {
-                console.error('❌ qr_code está vazio');
-                return { erro: 'Código PIX inválido' };
+                console.error('❌ [API] qr_code vazio')
+                return { erro: 'Código PIX inválido (vazio)' }
             }
 
-            // Validar se qr_image é base64 válido
-            if (data.qr_image.length < 100) { // Base64 de imagem deve ter pelo menos alguns caracteres
-                console.error('❌ qr_image muito pequeno, pode estar inválido');
-                return { erro: 'Imagem QR code inválida' };
+            if (data.qr_code.length < 50) {
+                console.error('❌ [API] qr_code muito curto:', data.qr_code.length)
+                return { erro: 'Código PIX incompleto' }
+            }
+
+            if (data.qr_image.length < 100) {
+                console.error('❌ [API] qr_image muito pequeno')
+                return { erro: 'Imagem QR code inválida' }
             }
 
             const resultado = {
                 pixCode: data.qr_code,
                 qrCode: `data:image/png;base64,${data.qr_image}`,
                 paymentId: data.payment_id,
+                valor: valor,
+                consumo: consumo,
+                telefoneFormatado: telefoneFormatado, // ✅ RETORNA TELEFONE FORMATADO TAMBÉM
                 dadosOriginais: data
-            };
+            }
 
-            console.log(' Resultado processado com sucesso:', {
+            console.log('✅ [API] Resultado processado:', {
                 pixCodeLength: resultado.pixCode.length,
                 qrCodeLength: resultado.qrCode.length,
-               paymentId: resultado.paymentId
-            });
+                paymentId: resultado.paymentId,
+                telefone: resultado.telefoneFormatado
+            })
 
-            return resultado;
+            return resultado
         } else {
-            console.error('Propriedades obrigatórias ausentes:', {
+            console.error('❌ [API] Propriedades ausentes:', {
                 temQrCode: !!data.qr_code,
                 temQrImage: !!data.qr_image,
+                temPaymentId: !!data.payment_id,
                 todasPropriedades: Object.keys(data)
-            });
+            })
+            return { 
+                erro: 'Dados do PIX incompletos',
+                detalhes: 'qr_code, qr_image ou payment_id não retornados',
+                dadosRecebidos: data
+            }
         }
 
-        // Se chegou até aqui, retorna os dados como estão
-        console.log('Retornando dados sem processamento específico');
-        return data;
-
     } catch (erro) {
-        console.error('Erro na requisição:', erro);
-        console.error('Detalhes do erro:', {
+        console.error('💥 [API] Erro na requisição:', erro)
+        console.error('Detalhes:', {
             message: erro.message,
             stack: erro.stack,
             name: erro.name
-        });
+        })
         
         return { 
             erro: 'Erro ao conectar com servidor',
             detalhesErro: erro.message 
-        };
+        }
     }
 }
 
-// verificar status de pagamento
-export const VerificarStatusPagamento = async (paymentId) => {
+// ✅ Verificar status de pagamento
+export const verificarStatusPagamento = async (paymentId) => {
     try {
-        console.log('verificando status de pagamento:', paymentId)
+        console.log('🔍 [API] Verificando status:', paymentId)
 
-        const responde = await fetch(`${apiBack}/pagamento/status/${paymentId}`, {
+        const response = await fetch(`${apiBack}/pagamento/status/${paymentId}`, {
             method: "GET",
             headers: {
-                "Content-Type" : "application/json"
+                "Content-Type": "application/json"
             }
         })
 
-        if (!responde.ok) {
-            console.error(`erro ao verficar status: ${response.status}`)
-            return { erro: `erro do servidor: ${response.status}`, status: responde.status}
+        if (!response.ok) {
+            console.error(`❌ [API] Erro ao verificar status: ${response.status}`)
+            return { erro: `Erro do servidor: ${response.status}`, status: response.status }
         }
 
-        const data = await responde.json()
-
-        console.log('status recebido:', data)
+        const data = await response.json()
+        console.log('✅ [API] Status recebido:', data)
         return data
 
     } catch (erro) {
-        console.error('erro ao verficar status:', erro)
-        return { erro: 'erro ao conectar com servidor', detalhesErro: erro.mensagem }
+        console.error('❌ [API] Erro ao verificar status:', erro)
+        return { erro: 'Erro ao conectar com servidor', detalhesErro: erro.message }
     }
 }
 
-
+// ✅ Processar consumo manualmente (caso necessário)
 export const processarConsumo = async (paymentId) => {
     try {
-        console.log('processando consumo para:', paymentId)
-        const responde = await fetch(`${apiBack}/processar-consumo`, {
+        console.log('⚙️ [API] Processando consumo para:', paymentId)
+        
+        const response = await fetch(`${apiBack}/processar-consumo`, {
             method: "POST",
             headers: {
-                "Content-Type" : "application/json"
+                "Content-Type": "application/json"
             },
-            body: JSON.stringify({ payment_id: paymentId})
+            body: JSON.stringify({ payment_id: paymentId })
         })
 
-        if (!responde.ok) {
-            console.error(`erro ap processar consumo: ${responde.status}`)
-                return { erro: `erro do servidor: ${responde.status}`, status: responde.status}
+        if (!response.ok) {
+            console.error(`❌ [API] Erro ao processar: ${response.status}`)
+            return { erro: `Erro do servidor: ${response.status}`, status: response.status }
         }
 
-        const data = await responde.json()
-        console.log('consumo processado:', data)
+        const data = await response.json()
+        console.log('✅ [API] Consumo processado:', data)
         return data
 
-    } catch (erro){
-        console.error('erro ao processar consumo:', erro)
-        return { erro: 'erro ao conectar com servidor', detalhesErro: erro.mensagem }
+    } catch (erro) {
+        console.error('❌ [API] Erro ao processar consumo:', erro)
+        return { erro: 'Erro ao conectar com servidor', detalhesErro: erro.message }
     }
 }
 
-
-
-//função para verificar status automaticamente
-export const inicarVerificar = (paymentId, callback, intervalos = 30000) => {
-    console.log('iniciando verificação automatica para:', paymentId)
+// ✅ Iniciar verificação automática de status
+export const iniciarVerificacaoAutomatica = (paymentId, callback, intervalo = 10000) => {
+    console.log('🔄 [API] Iniciando verificação automática para:', paymentId)
 
     const verificar = async () => {
-        const resultado = await VerificarStatusPagamento(paymentId)
+        const resultado = await verificarStatusPagamento(paymentId)
 
         if (resultado.erro) {
-            console.error('erro na verificação automatica:', resultado.erro)
+            console.error('❌ [API] Erro na verificação:', resultado.erro)
             callback({ erro: resultado.erro })
             return
         }
 
-        console.log('status atual:', resultado.status)
+        console.log('📊 [API] Status atual:', resultado.status)
         callback(resultado)
 
+        // Para se o status for final
         if (['approved', 'rejected', 'cancelled', 'processed'].includes(resultado.status)) {
-            console.log('verificação automatica finalizada:', resultado.status)
+            console.log('✅ [API] Verificação finalizada:', resultado.status)
             return
         }
 
-        //continuar verificando se aindat está pedente
-        setTimeout(verificar, intervalos)
+        // Continuar verificando se ainda está pendente
+        setTimeout(verificar, intervalo)
     }
+    
     verificar()
 }
-
-
-const adicionarConsumoBot = async (telefone, consumo) => {
-    try {
-        consoele.log(`adicionado ${consumo} consumo para ${telefone}`)
-
-        const responde = await fetch(`${apiBack}/add-consumo`, {
-            method: "POST",
-            headers: {
-                "Content-Type" : "application/json"
-            },
-            body: JSON.stringify({
-                numero: telefone,
-                consumo: parseInt(consumo)
-            })
-        })
-
-        if (!responde.ok) {
-            console.error(`erro no HTTP ao adicionar consumo: ${responde.status}`)
-            return { sucesso: false, erro: `erro HTTP ${responde.status}`}
-        }
-
-        const resultado = await responde.json()
-        console.log('resultado de adição de consumo:', resultado)
-
-        return resultado
-
-    } catch (error) {
-        console.error('erro ao adicionar consumo no bot:', error)
-        return {
-            sucesso: false, erro: 'erro de conexão com o bot',
-            datalhes: error.mensagem
-        }
-    }
-}
-
