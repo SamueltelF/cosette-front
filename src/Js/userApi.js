@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 // ✅ URL correta do backend principal
-const API_BASE_URL = 'http://localhost:8080/api/bot';
+const API_BASE_URL = 'https://https://cosette.uno/api/bot';
 
 export const useApi = () => {
     const [isLoading, setIsLoading] = useState(false);

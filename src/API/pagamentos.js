@@ -1,5 +1,5 @@
 // ✅ URL CORRETA (sem /bot)
-const apiBack = 'http://localhost:8080/api/bot'
+const apiBack = 'https://cosette.uno/api/bot'
 
 // ✅ FUNÇÃO AUXILIAR: Formatar número para padrão WhatsApp
 const formatarParaWhatsApp = (numero) => {
