@@ -87,17 +87,7 @@ const WhatsAppBotLogin = () => {
         const ddd = numbers.slice(0, 2)
         let numero = numbers.slice(2)
         
-        if (numero.length === 8) {
-            numero = '9' + numero
-        }
         
-        if (numero.length !== 9) {
-            return { valid: false, message: 'Número deve ter 9 dígitos (com o 9 da operadora)' }
-        }
-        
-        if (!numero.startsWith('9')) {
-            return { valid: false, message: 'Número deve começar com 9 (celular)' }
-        }
         
         const fullNumber = '55' + ddd + numero
         
