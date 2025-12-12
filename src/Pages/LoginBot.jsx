@@ -73,30 +73,72 @@ const WhatsAppBotLogin = () => {
         return { valid: true }
     }
 
-    const normalizeWhatsAppNumber = (phone) => {
-        let numbers = phone.replace(/\D/g, '')
-        
-        if (numbers.startsWith('55')) {
-            numbers = numbers.slice(2)
-        }
-        
-        if (numbers.length < 10) {
-            return { valid: false, message: 'Número incompleto' }
-        }
-        
-        const ddd = numbers.slice(0, 2)
-        let numero = numbers.slice(2)
-        
-        
-        
-        const fullNumber = '55' + ddd + numero
-        
+    // ❌ CÓDIGO ANTIGO (BUGADO)
+const normalizeWhatsAppNumberOLD = (phone) => {
+    let numbers = phone.replace(/\D/g, '')
+    
+    if (numbers.startsWith('55')) {
+        numbers = numbers.slice(2)
+    }
+    
+    if (numbers.length < 10) {
+        return { valid: false, message: 'Número incompleto' }
+    }
+    
+    const ddd = numbers.slice(0, 2)
+    let numero = numbers.slice(2)
+    
+    // ❌ PROBLEMA: Sempre adiciona 9, mesmo se já tiver
+    // Se numero = "999999999", vira "9999999999" (10 dígitos!)
+    
+    const fullNumber = '55' + ddd + numero
+    
+    return { 
+        valid: true, 
+        normalized: fullNumber,
+        formatted: `+55 (${ddd}) ${numero.slice(0, 5)}-${numero.slice(5)}`
+    }
+}
+
+// ✅ CÓDIGO NOVO (CORRETO)
+const normalizeWhatsAppNumber = (phone) => {
+    // Remove tudo que não é número
+    let numbers = phone.replace(/\D/g, '')
+    
+    // Remove o código do país se já estiver presente
+    if (numbers.startsWith('55')) {
+        numbers = numbers.slice(2)
+    }
+    
+    // Validar tamanho mínimo
+    if (numbers.length < 10) {
+        return { valid: false, message: 'Número incompleto' }
+    }
+    
+    // Separar DDD e número
+    const ddd = numbers.slice(0, 2)
+    let numero = numbers.slice(2)
+    
+    // ✅ CORREÇÃO: Não adiciona 9 extra
+    // Apenas mantém o número como está
+    
+    // Validar tamanho do número (deve ter 8 ou 9 dígitos)
+    if (numero.length < 8 || numero.length > 9) {
         return { 
-            valid: true, 
-            normalized: fullNumber,
-            formatted: `+55 (${ddd}) ${numero.slice(0, 5)}-${numero.slice(5)}`
+            valid: false, 
+            message: 'Número deve ter 8 ou 9 dígitos' 
         }
     }
+    
+    // Montar número completo
+    const fullNumber = '55' + ddd + numero
+    
+    return { 
+        valid: true, 
+        normalized: fullNumber,
+        formatted: `+55 (${ddd}) ${numero.slice(0, numero.length === 9 ? 5 : 4)}-${numero.slice(numero.length === 9 ? 5 : 4)}`
+    }
+}
 
     const validatePhone = (phone) => {
         const trimmedPhone = phone.trim()
